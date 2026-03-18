@@ -1,0 +1,49 @@
+# ---------------------------------------------------------------
+# Core CV & ML
+# ---------------------------------------------------------------
+opencv-python>=4.8.0
+scikit-image>=0.21.0          # SSIM filter
+torch>=2.1.0                  # CLIP + Whisper backend
+torchvision>=0.16.0
+torchaudio>=2.1.0
+ftfy>=6.1.1                   # Required by CLIP
+regex>=2023.6.3               # Required by CLIP
+
+# NOTE: OpenAI CLIP has no PyPI package.
+# Installed separately in setup — see environment_setup.sh:
+#   pip install git+https://github.com/openai/CLIP.git
+
+# ---------------------------------------------------------------
+# Whisper (local transcription — runs fully offline)
+# ---------------------------------------------------------------
+openai-whisper>=20231117
+ffmpeg-python>=0.2.0          # Python bindings; ffmpeg binary installed via conda
+
+# ---------------------------------------------------------------
+# Scene detection
+# ---------------------------------------------------------------
+scenedetect[opencv]>=0.6.2
+
+# ---------------------------------------------------------------
+# Embeddings & Vector DB
+# ---------------------------------------------------------------
+sentence-transformers>=2.7.0
+chromadb>=0.5.0
+
+# ---------------------------------------------------------------
+# Gemini API
+# ---------------------------------------------------------------
+google-generativeai>=0.7.0
+
+# ---------------------------------------------------------------
+# Streamlit frontend
+# ---------------------------------------------------------------
+streamlit>=1.35.0
+Pillow>=10.3.0
+
+# ---------------------------------------------------------------
+# Utilities
+# ---------------------------------------------------------------
+python-dotenv>=1.0.0
+numpy>=1.26.0
+tqdm>=4.66.0

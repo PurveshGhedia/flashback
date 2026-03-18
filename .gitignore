@@ -1,0 +1,26 @@
+# Secrets
+.env
+*.env
+
+# Data — never commit videos, frames, or vector DB
+data/videos/
+data/frames/
+data/transcripts/
+data/chroma_db/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
