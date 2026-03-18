@@ -1,4 +1,4 @@
-# Secrets
+# Environment & secrets
 .env
 *.env
 
@@ -7,6 +7,7 @@ data/videos/
 data/frames/
 data/transcripts/
 data/chroma_db/
+data/videos_registry.json
 
 # Python
 __pycache__/
@@ -24,3 +25,9 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Streamlit — machine-specific config
+.streamlit/
+
+# Static — derived from data/videos/, regenerated locally
+static/
