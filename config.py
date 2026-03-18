@@ -15,15 +15,21 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-BASE_DIR        = Path(__file__).parent
-DATA_DIR        = BASE_DIR / "data"
-VIDEOS_DIR      = DATA_DIR / "videos"
-FRAMES_DIR      = DATA_DIR / "frames"
+BASE_DIR = Path(__file__).parent
+DATA_DIR = BASE_DIR / "data"
+VIDEOS_DIR = DATA_DIR / "videos"
+FRAMES_DIR = DATA_DIR / "frames"
 TRANSCRIPTS_DIR = DATA_DIR / "transcripts"
-CHROMA_DIR      = DATA_DIR / "chroma_db"
+CHROMA_DIR = DATA_DIR / "chroma_db"
+
+# Static files directory — Streamlit serves files from here
+# Allows the HTML5 video player to access video files via URL
+STATIC_DIR = BASE_DIR / "static"
+STATIC_VIDEOS_DIR = STATIC_DIR / "videos"
 
 # Ensure all data directories exist on import
-for _dir in [VIDEOS_DIR, FRAMES_DIR, TRANSCRIPTS_DIR, CHROMA_DIR]:
+for _dir in [VIDEOS_DIR, FRAMES_DIR, TRANSCRIPTS_DIR, CHROMA_DIR,
+             STATIC_DIR, STATIC_VIDEOS_DIR]:
     _dir.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
@@ -51,31 +57,31 @@ SCENE_DETECTION_THRESHOLD = 27.0
 # ---------------------------------------------------------------------------
 # Rolling window size (in frames) for computing mean/std of SSIM scores.
 # A window of 30 means we look at the last 30 SSIM scores to set the threshold.
-SSIM_ROLLING_WINDOW     = 30
+SSIM_ROLLING_WINDOW = 30
 
 # Threshold = rolling_mean - SSIM_STD_MULTIPLIER * rolling_std
 # Lower multiplier → more aggressive filtering (keep fewer frames)
 # Higher multiplier → more conservative filtering (keep more frames)
-SSIM_STD_MULTIPLIER     = 1.0
+SSIM_STD_MULTIPLIER = 1.0
 
 # Absolute floor: never drop a frame if SSIM is below this, regardless of
 # adaptive threshold. Catches hard scene cuts that adaptive logic might miss.
-SSIM_ABSOLUTE_FLOOR     = 0.50
+SSIM_ABSOLUTE_FLOOR = 0.50
 
 # Absolute ceiling: always drop a frame if SSIM is above this — pixel-perfect
 # duplicates that we never want to keep even on the first few frames before
 # the rolling window has enough data.
-SSIM_ABSOLUTE_CEILING   = 0.98
+SSIM_ABSOLUTE_CEILING = 0.98
 
 # ---------------------------------------------------------------------------
 # Stage 2 Filter — CLIP Semantic Similarity
 # ---------------------------------------------------------------------------
-CLIP_MODEL_NAME             = "ViT-B/32"
+CLIP_MODEL_NAME = "ViT-B/32"
 
 # Frames with cosine similarity ABOVE this threshold are considered
 # semantically redundant and dropped. ~0.95 is conservative (only drop
 # near-identical semantics); lower values filter more aggressively.
-CLIP_SIMILARITY_THRESHOLD   = 0.95
+CLIP_SIMILARITY_THRESHOLD = 0.95
 
 # ---------------------------------------------------------------------------
 # Whisper Transcription
@@ -99,14 +105,14 @@ TRANSCRIPT_CHUNK_OVERLAP_SECONDS = 5
 TEXT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 # ChromaDB collection names (namespaced per video using video hash as prefix)
-CHROMA_FRAMES_COLLECTION_SUFFIX      = "_frames"
-CHROMA_TRANSCRIPT_COLLECTION_SUFFIX  = "_transcript"
+CHROMA_FRAMES_COLLECTION_SUFFIX = "_frames"
+CHROMA_TRANSCRIPT_COLLECTION_SUFFIX = "_transcript"
 
 # ---------------------------------------------------------------------------
 # Retrieval — Dynamic-k
 # ---------------------------------------------------------------------------
 # Initial candidate pool before threshold filtering
-RETRIEVAL_INITIAL_K     = 10
+RETRIEVAL_INITIAL_K = 10
 
 # Cosine similarity threshold for keeping a candidate.
 # CLIP embedding space: ~0.25–0.30 is a reasonable starting point.
@@ -117,18 +123,19 @@ RETRIEVAL_MIN_K = 2
 RETRIEVAL_MAX_K = 10
 
 # Weight for blending frame vs. transcript retrieval scores (must sum to 1.0)
-RETRIEVAL_FRAME_WEIGHT      = 0.4
-RETRIEVAL_TRANSCRIPT_WEIGHT = 0.6   # Transcripts weighted higher for lecture content
+RETRIEVAL_FRAME_WEIGHT = 0.4
+# Transcripts weighted higher for lecture content
+RETRIEVAL_TRANSCRIPT_WEIGHT = 0.6
 
 # ---------------------------------------------------------------------------
 # Gemini (Re-ranking + Generation)
 # ---------------------------------------------------------------------------
-GEMINI_MODEL_NAME       = "gemini-1.5-pro"
+GEMINI_MODEL_NAME = "gemini-2.5-flash"
 GEMINI_MAX_OUTPUT_TOKENS = 2048
 
 # Max keyframe images to send to Gemini in a single generation call.
 # Gemini 1.5 Pro supports many images but we cap to control cost.
-GEMINI_MAX_FRAMES       = 5
+GEMINI_MAX_FRAMES = 5
 
 # Max transcript characters to include in the Gemini prompt context.
 # ~4000 chars ≈ ~1000 tokens — keeps cost predictable.

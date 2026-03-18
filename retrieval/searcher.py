@@ -32,14 +32,6 @@ Result deduplication:
   taking the higher score when there's overlap.
 """
 
-import sys
-import logging
-import numpy as np
-from pathlib import Path
-from typing import NamedTuple, Optional
-
-sys.path.append(str(Path(__file__).parent.parent))
-
 from config import (
     RETRIEVAL_INITIAL_K,
     RETRIEVAL_SIMILARITY_THRESHOLD,
@@ -50,6 +42,14 @@ from config import (
     CHROMA_FRAMES_COLLECTION_SUFFIX,
     CHROMA_TRANSCRIPT_COLLECTION_SUFFIX,
 )
+import sys
+import logging
+import numpy as np
+from pathlib import Path
+from typing import NamedTuple, Optional
+
+sys.path.append(str(Path(__file__).parent.parent))
+
 
 logger = logging.getLogger(__name__)
 
@@ -65,24 +65,24 @@ class SearchResult(NamedTuple):
     """
     A single retrieved result, normalised across both collections.
     """
-    result_id    : str          # ChromaDB document id
-    timestamp    : float        # seconds from video start (primary sort key)
-    score        : float        # weighted similarity score [0, 1]
-    source       : str          # "frames" or "transcript"
-    text         : str          # transcript text (empty for frame results)
-    frame_path   : str          # relative path to JPEG (empty for transcript)
-    metadata     : dict         # full ChromaDB metadata dict
+    result_id: str          # ChromaDB document id
+    timestamp: float        # seconds from video start (primary sort key)
+    score: float        # weighted similarity score [0, 1]
+    source: str          # "frames" or "transcript"
+    text: str          # transcript text (empty for frame results)
+    frame_path: str          # relative path to JPEG (empty for transcript)
+    metadata: dict         # full ChromaDB metadata dict
 
 
 class SearchResponse(NamedTuple):
     """
     Full response from a search query.
     """
-    query         : str
-    results       : list         # list[SearchResult], sorted by score desc
-    total_frames_candidates   : int
+    query: str
+    results: list         # list[SearchResult], sorted by score desc
+    total_frames_candidates: int
     total_transcript_candidates: int
-    dynamic_k     : int          # how many results were kept after threshold
+    dynamic_k: int          # how many results were kept after threshold
 
 
 # ------------------------------------------------------------------
@@ -91,7 +91,7 @@ class SearchResponse(NamedTuple):
 def _get_collection(video_hash: str, suffix: str):
     """Get a ChromaDB collection by video hash and suffix."""
     from ingestion.indexer import get_chroma_client
-    client     = get_chroma_client()
+    client = get_chroma_client()
     collection = client.get_collection(f"{video_hash}{suffix}")
     return collection
 
@@ -101,11 +101,11 @@ def _get_collection(video_hash: str, suffix: str):
 # ------------------------------------------------------------------
 def _search_collection(
     collection,
-    query_embedding : list,
-    initial_k       : int,
-    threshold       : float,
-    weight          : float,
-    source_label    : str,
+    query_embedding: list,
+    initial_k: int,
+    threshold: float,
+    weight: float,
+    source_label: str,
 ) -> list[SearchResult]:
     """
     Search a single ChromaDB collection and return filtered results.
@@ -135,10 +135,10 @@ def _search_collection(
 
     search_results = []
 
-    ids        = results["ids"][0]
-    documents  = results["documents"][0]
-    metadatas  = results["metadatas"][0]
-    distances  = results["distances"][0]
+    ids = results["ids"][0]
+    documents = results["documents"][0]
+    metadatas = results["metadatas"][0]
+    distances = results["distances"][0]
 
     for rid, doc, meta, dist in zip(ids, documents, metadatas, distances):
         # ChromaDB cosine distance is in [0, 2]. Convert to similarity [0, 1]:
@@ -157,22 +157,22 @@ def _search_collection(
 
         # Extract timestamp — different field names for frames vs transcript
         if source_label == "frames":
-            timestamp  = meta.get("timestamp", 0.0)
+            timestamp = meta.get("timestamp", 0.0)
             frame_path = meta.get("frame_path", "")
-            text       = ""
+            text = ""
         else:
-            timestamp  = meta.get("start_time", 0.0)
+            timestamp = meta.get("start_time", 0.0)
             frame_path = ""
-            text       = doc or ""
+            text = doc or ""
 
         search_results.append(SearchResult(
-            result_id  = rid,
-            timestamp  = timestamp,
-            score      = round(weighted_score, 4),
-            source     = source_label,
-            text       = text,
-            frame_path = frame_path,
-            metadata   = meta,
+            result_id=rid,
+            timestamp=timestamp,
+            score=round(weighted_score, 4),
+            source=source_label,
+            text=text,
+            frame_path=frame_path,
+            metadata=meta,
         ))
 
         logger.debug(
@@ -206,8 +206,8 @@ def _deduplicate_results(
 
     # Sort by timestamp for windowed dedup
     sorted_results = sorted(results, key=lambda r: r.timestamp)
-    deduped        = []
-    used           = set()
+    deduped = []
+    used = set()
 
     for i, result in enumerate(sorted_results):
         if i in used:
@@ -235,10 +235,10 @@ def _deduplicate_results(
 # Dynamic-k filtering
 # ------------------------------------------------------------------
 def _apply_dynamic_k(
-    results   : list[SearchResult],
-    threshold : float = RETRIEVAL_SIMILARITY_THRESHOLD,
-    min_k     : int   = RETRIEVAL_MIN_K,
-    max_k     : int   = RETRIEVAL_MAX_K,
+    results: list[SearchResult],
+    threshold: float = RETRIEVAL_SIMILARITY_THRESHOLD,
+    min_k: int = RETRIEVAL_MIN_K,
+    max_k: int = RETRIEVAL_MAX_K,
 ) -> list[SearchResult]:
     """
     Apply dynamic-k: filter by threshold, clamp to [min_k, max_k].
@@ -275,12 +275,12 @@ def _apply_dynamic_k(
 # Main search function
 # ------------------------------------------------------------------
 def search(
-    query       : str,
-    video_hash  : str,
-    initial_k   : int   = RETRIEVAL_INITIAL_K,
-    threshold   : float = RETRIEVAL_SIMILARITY_THRESHOLD,
-    min_k       : int   = RETRIEVAL_MIN_K,
-    max_k       : int   = RETRIEVAL_MAX_K,
+    query: str,
+    video_hash: str,
+    initial_k: int = RETRIEVAL_INITIAL_K,
+    threshold: float = RETRIEVAL_SIMILARITY_THRESHOLD,
+    min_k: int = RETRIEVAL_MIN_K,
+    max_k: int = RETRIEVAL_MAX_K,
 ) -> SearchResponse:
     """
     Hybrid search across frames + transcript collections for a video.
@@ -314,14 +314,15 @@ def search(
     # -- Search frames collection --
     frame_results = []
     try:
-        frames_col   = _get_collection(video_hash, CHROMA_FRAMES_COLLECTION_SUFFIX)
+        frames_col = _get_collection(
+            video_hash, CHROMA_FRAMES_COLLECTION_SUFFIX)
         frame_results = _search_collection(
-            collection      = frames_col,
-            query_embedding = embeddings["frames"].tolist(),
-            initial_k       = initial_k,
-            threshold       = 0.0,   # threshold applied after merging
-            weight          = RETRIEVAL_FRAME_WEIGHT,
-            source_label    = "frames",
+            collection=frames_col,
+            query_embedding=embeddings["frames"].tolist(),
+            initial_k=initial_k,
+            threshold=0.0,   # threshold applied after merging
+            weight=RETRIEVAL_FRAME_WEIGHT,
+            source_label="frames",
         )
         logger.info("  Frames collection: %d candidates", len(frame_results))
     except Exception as e:
@@ -330,16 +331,18 @@ def search(
     # -- Search transcript collection --
     transcript_results = []
     try:
-        transcript_col    = _get_collection(video_hash, CHROMA_TRANSCRIPT_COLLECTION_SUFFIX)
+        transcript_col = _get_collection(
+            video_hash, CHROMA_TRANSCRIPT_COLLECTION_SUFFIX)
         transcript_results = _search_collection(
-            collection      = transcript_col,
-            query_embedding = embeddings["transcript"],
-            initial_k       = initial_k,
-            threshold       = 0.0,   # threshold applied after merging
-            weight          = RETRIEVAL_TRANSCRIPT_WEIGHT,
-            source_label    = "transcript",
+            collection=transcript_col,
+            query_embedding=embeddings["transcript"],
+            initial_k=initial_k,
+            threshold=0.0,   # threshold applied after merging
+            weight=RETRIEVAL_TRANSCRIPT_WEIGHT,
+            source_label="transcript",
         )
-        logger.info("  Transcript collection: %d candidates", len(transcript_results))
+        logger.info("  Transcript collection: %d candidates",
+                    len(transcript_results))
     except Exception as e:
         logger.warning("Could not search transcript collection: %s", e)
 
@@ -349,15 +352,15 @@ def search(
     if not all_results:
         logger.warning("No results found for query: '%s'", query)
         return SearchResponse(
-            query                       = query,
-            results                     = [],
-            total_frames_candidates     = 0,
-            total_transcript_candidates = 0,
-            dynamic_k                   = 0,
+            query=query,
+            results=[],
+            total_frames_candidates=0,
+            total_transcript_candidates=0,
+            dynamic_k=0,
         )
 
     deduped = _deduplicate_results(all_results)
-    final   = _apply_dynamic_k(deduped, threshold, min_k, max_k)
+    final = _apply_dynamic_k(deduped, threshold, min_k, max_k)
 
     logger.info(
         "Search complete — %d frame + %d transcript → "
@@ -367,11 +370,11 @@ def search(
     )
 
     return SearchResponse(
-        query                       = query,
-        results                     = final,
-        total_frames_candidates     = len(frame_results),
-        total_transcript_candidates = len(transcript_results),
-        dynamic_k                   = len(final),
+        query=query,
+        results=final,
+        total_frames_candidates=len(frame_results),
+        total_transcript_candidates=len(transcript_results),
+        dynamic_k=len(final),
     )
 
 
@@ -379,10 +382,10 @@ def search(
 # Timestamp-range filtered search
 # ------------------------------------------------------------------
 def search_in_range(
-    query       : str,
-    video_hash  : str,
-    start_sec   : float,
-    end_sec     : float,
+    query: str,
+    video_hash: str,
+    start_sec: float,
+    end_sec: float,
     **kwargs,
 ) -> SearchResponse:
     """
@@ -406,11 +409,11 @@ def search_in_range(
     )
 
     return SearchResponse(
-        query                       = response.query,
-        results                     = filtered,
-        total_frames_candidates     = response.total_frames_candidates,
-        total_transcript_candidates = response.total_transcript_candidates,
-        dynamic_k                   = len(filtered),
+        query=response.query,
+        results=filtered,
+        total_frames_candidates=response.total_frames_candidates,
+        total_transcript_candidates=response.total_transcript_candidates,
+        dynamic_k=len(filtered),
     )
 
 
@@ -420,7 +423,8 @@ def search_in_range(
 # ------------------------------------------------------------------
 if __name__ == "__main__":
     import sys
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    logging.basicConfig(level=logging.INFO,
+                        format="%(levelname)s: %(message)s")
 
     if len(sys.argv) < 2:
         print("Usage: python searcher.py <video_hash>")
@@ -449,3 +453,85 @@ if __name__ == "__main__":
                   f"text='{r.text[:60]}...'" if r.text else
                   f"  [{mins:02d}:{secs:02d}] score={r.score:.4f} "
                   f"source={r.source:10s} frame={r.frame_path}")
+
+
+# ------------------------------------------------------------------
+# Cross-video search — searches ALL indexed videos
+# ------------------------------------------------------------------
+def search_all_videos(
+    query: str,
+    top_n: int = 3,
+    **kwargs,
+) -> list[dict]:
+    """
+    Search across ALL indexed videos and return the most relevant
+    results grouped by video.
+
+    Parameters
+    ----------
+    query  : natural language query string
+    top_n  : number of top videos to return results from
+
+    Returns
+    -------
+    List of dicts sorted by best score, each containing:
+      {
+        "video_hash"  : str,
+        "video_info"  : dict,        — registry entry
+        "best_score"  : float,       — highest scoring result
+        "results"     : list[SearchResult],
+      }
+
+    Example
+    -------
+    >>> results = search_all_videos("explain backpropagation")
+    >>> for r in results:
+    ...     print(r["video_info"]["video_name"], r["best_score"])
+    """
+    from ingestion.indexer import list_indexed_videos
+
+    videos = list_indexed_videos()
+    if not videos:
+        logger.warning("No indexed videos found.")
+        return []
+
+    logger.info(
+        "Cross-video search: '%s' across %d videos", query, len(videos)
+    )
+
+    video_results = []
+
+    for video in videos:
+        hash_ = video["video_hash"]
+        try:
+            response = search(query, hash_, **kwargs)
+            if response.results:
+                best_score = max(r.score for r in response.results)
+                video_results.append({
+                    "video_hash": hash_,
+                    "video_info": video,
+                    "best_score": best_score,
+                    "results": response.results,
+                })
+                logger.info(
+                    "  %s: best_score=%.4f (%d results)",
+                    video.get("video_name", hash_),
+                    best_score,
+                    len(response.results),
+                )
+        except Exception as e:
+            logger.warning("Search failed for video %s: %s", hash_, e)
+            continue
+
+    # Sort by best score descending
+    video_results.sort(key=lambda x: x["best_score"], reverse=True)
+
+    # Return top_n most relevant videos
+    top = video_results[:top_n]
+
+    logger.info(
+        "Cross-video search complete — %d/%d videos had results",
+        len(video_results), len(videos)
+    )
+
+    return top

@@ -34,6 +34,13 @@ Prompt design:
     5. Instructions for the response format
 """
 
+from retrieval.searcher import SearchResult
+from config import (
+    GEMINI_MODEL_NAME,
+    GEMINI_MAX_OUTPUT_TOKENS,
+    GEMINI_MAX_FRAMES,
+    GEMINI_MAX_TRANSCRIPT_CHARS,
+)
 import sys
 import logging
 import base64
@@ -42,13 +49,6 @@ from typing import NamedTuple, Optional
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from config import (
-    GEMINI_MODEL_NAME,
-    GEMINI_MAX_OUTPUT_TOKENS,
-    GEMINI_MAX_FRAMES,
-    GEMINI_MAX_TRANSCRIPT_CHARS,
-)
-from retrieval.searcher import SearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -61,13 +61,13 @@ class Answer(NamedTuple):
     The complete response to a student's query.
     Contains everything needed to render the UI response.
     """
-    query           : str
-    response_text   : str           # Gemini's generated answer
-    timestamps      : list[float]   # relevant timestamps in seconds
-    keyframe_paths  : list[str]     # paths to keyframe JPEGs for display
-    transcript_used : list[str]     # transcript excerpts used as context
-    sources         : list[dict]    # source metadata for citations
-    model_used      : str           # which Gemini model generated this
+    query: str
+    response_text: str           # Gemini's generated answer
+    timestamps: list[float]   # relevant timestamps in seconds
+    keyframe_paths: list[str]     # paths to keyframe JPEGs for display
+    transcript_used: list[str]     # transcript excerpts used as context
+    sources: list[dict]    # source metadata for citations
+    model_used: str           # which Gemini model generated this
 
 
 # ------------------------------------------------------------------
@@ -125,9 +125,9 @@ def _load_image_for_gemini(frame_path: str) -> Optional[dict]:
 # Prompt builder
 # ------------------------------------------------------------------
 def _build_generation_prompt(
-    query               : str,
-    results             : list[SearchResult],
-    transcript_context  : str,
+    query: str,
+    results: list[SearchResult],
+    transcript_context: str,
 ) -> list:
     """
     Build a multimodal prompt for Gemini.
@@ -163,7 +163,8 @@ def _build_generation_prompt(
         parts.append(transcript_text)
 
     # -- Keyframes with timestamps --
-    frame_results = [r for r in results if r.source == "frames" and r.frame_path]
+    frame_results = [r for r in results if r.source ==
+                     "frames" and r.frame_path]
 
     if frame_results:
         parts.append("RELEVANT KEYFRAMES FROM THE LECTURE:\n")
@@ -188,14 +189,15 @@ def _build_generation_prompt(
 
 
 def _build_transcript_context(
-    results     : list[SearchResult],
-    max_chars   : int = GEMINI_MAX_TRANSCRIPT_CHARS,
+    results: list[SearchResult],
+    max_chars: int = GEMINI_MAX_TRANSCRIPT_CHARS,
 ) -> str:
     """
     Collect and format transcript text from search results.
     Sorted by timestamp, truncated to max_chars.
     """
-    transcript_results = [r for r in results if r.source == "transcript" and r.text]
+    transcript_results = [
+        r for r in results if r.source == "transcript" and r.text]
 
     if not transcript_results:
         return ""
@@ -227,8 +229,8 @@ def _build_transcript_context(
 # Main answer generation function
 # ------------------------------------------------------------------
 def generate_answer(
-    query   : str,
-    results : list[SearchResult],
+    query: str,
+    results: list[SearchResult],
 ) -> Answer:
     """
     Generate a final answer using Gemini 1.5 Pro.
@@ -251,16 +253,16 @@ def generate_answer(
     """
     if not results:
         return Answer(
-            query           = query,
-            response_text   = (
+            query=query,
+            response_text=(
                 "I couldn't find relevant content in the lecture for your query. "
                 "Try rephrasing or asking about a different topic."
             ),
-            timestamps      = [],
-            keyframe_paths  = [],
-            transcript_used = [],
-            sources         = [],
-            model_used      = GEMINI_MODEL_NAME,
+            timestamps=[],
+            keyframe_paths=[],
+            transcript_used=[],
+            sources=[],
+            model_used=GEMINI_MODEL_NAME,
         )
 
     logger.info(
@@ -269,11 +271,11 @@ def generate_answer(
 
     # -- Collect context --
     transcript_context = _build_transcript_context(results)
-    prompt_parts       = _build_generation_prompt(query, results, transcript_context)
+    prompt_parts = _build_generation_prompt(query, results, transcript_context)
 
     # -- Metadata for the Answer object --
-    all_timestamps   = sorted(set(r.timestamp for r in results))
-    keyframe_paths   = [
+    all_timestamps = sorted(set(r.timestamp for r in results))
+    keyframe_paths = [
         r.frame_path for r in results
         if r.source == "frames" and r.frame_path
     ][:GEMINI_MAX_FRAMES]
@@ -283,26 +285,50 @@ def generate_answer(
     ]
     sources = [
         {
-            "result_id" : r.result_id,
-            "source"    : r.source,
-            "timestamp" : r.timestamp,
-            "score"     : r.score,
+            "result_id": r.result_id,
+            "source": r.source,
+            "timestamp": r.timestamp,
+            "score": r.score,
         }
         for r in results
     ]
 
     # -- Call Gemini --
     try:
-        model    = _load_gemini()
-        response = model.generate_content(
-            prompt_parts,
-            generation_config={
-                "max_output_tokens" : GEMINI_MAX_OUTPUT_TOKENS,
-                "temperature"       : 0.2,   # Low temp for factual lecture content
-            }
+        import google.genai as genai
+        import google.genai.types as types
+
+        client = _load_gemini()
+
+        # Gemini new SDK requires all parts to be strings or inline data
+        # PIL Images need to be converted to inline image parts
+        clean_parts = []
+        for part in prompt_parts:
+            if isinstance(part, str):
+                clean_parts.append(part)
+            else:
+                # PIL Image — convert to bytes for inline data
+                import io
+                buf = io.BytesIO()
+                part.save(buf, format="JPEG", quality=85)
+                clean_parts.append(
+                    types.Part.from_bytes(
+                        data=buf.getvalue(),
+                        mime_type="image/jpeg",
+                    )
+                )
+
+        response = client.models.generate_content(
+            model=GEMINI_MODEL_NAME,
+            contents=clean_parts,
+            config=types.GenerateContentConfig(
+                max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
+                temperature=0.2,
+            ),
         )
         response_text = response.text
-        logger.info("Answer generated successfully (%d chars).", len(response_text))
+        logger.info("Answer generated successfully (%d chars).",
+                    len(response_text))
 
     except Exception as e:
         logger.error("Gemini generation failed: %s", e)
@@ -315,13 +341,13 @@ def generate_answer(
         )
 
     return Answer(
-        query           = query,
-        response_text   = response_text,
-        timestamps      = all_timestamps,
-        keyframe_paths  = keyframe_paths,
-        transcript_used = transcript_texts,
-        sources         = sources,
-        model_used      = GEMINI_MODEL_NAME,
+        query=query,
+        response_text=response_text,
+        timestamps=all_timestamps,
+        keyframe_paths=keyframe_paths,
+        transcript_used=transcript_texts,
+        sources=sources,
+        model_used=GEMINI_MODEL_NAME,
     )
 
 
@@ -384,7 +410,8 @@ def ask(query: str, video_hash: str) -> Answer:
 # (run: python generation/answerer.py <video_hash> "<query>")
 # ------------------------------------------------------------------
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    logging.basicConfig(level=logging.INFO,
+                        format="%(levelname)s: %(message)s")
 
     if len(sys.argv) < 3:
         print("Usage: python answerer.py <video_hash> \"<query>\"")
@@ -392,7 +419,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     video_hash = sys.argv[1]
-    query      = sys.argv[2]
+    query = sys.argv[2]
 
     print(f"\nQuery    : '{query}'")
     print(f"Video    : {video_hash}")
@@ -404,6 +431,63 @@ if __name__ == "__main__":
     print("-" * 60)
     print(answer.response_text)
     print("-" * 60)
-    print(f"\nTimestamps  : {[_format_timestamp(t) for t in answer.timestamps]}")
+    print(
+        f"\nTimestamps  : {[_format_timestamp(t) for t in answer.timestamps]}")
     print(f"Keyframes   : {answer.keyframe_paths}")
     print(f"Model used  : {answer.model_used}")
+
+
+# ------------------------------------------------------------------
+# Cross-video pipeline convenience function
+# ------------------------------------------------------------------
+def ask_across_videos(query: str) -> list:
+    """
+    Search ALL indexed videos and return answers from the most
+    relevant ones.
+
+    Returns
+    -------
+    List of dicts, one per relevant video found:
+      {
+        "video_hash"  : str,
+        "video_info"  : dict,    — registry entry (name, thumbnail etc.)
+        "answer"      : Answer,  — generated answer for this video
+        "best_score"  : float,
+      }
+    Sorted by relevance score descending.
+
+    Example
+    -------
+    >>> results = ask_across_videos("explain backpropagation")
+    >>> for r in results:
+    ...     print(r["video_info"]["video_name"])
+    ...     print(r["answer"].response_text)
+    """
+    from retrieval.searcher import search_all_videos
+    from retrieval.reranker import rerank
+
+    logger.info("=== Cross-video RAG: '%s' ===", query)
+
+    # Step 1: Search all videos
+    video_results = search_all_videos(query)
+
+    if not video_results:
+        return []
+
+    answers = []
+
+    for vr in video_results:
+        # Step 2: Re-rank per video
+        reranked = rerank(query, vr["results"])
+
+        # Step 3: Generate answer
+        answer = generate_answer(query, reranked)
+
+        answers.append({
+            "video_hash": vr["video_hash"],
+            "video_info": vr["video_info"],
+            "answer": answer,
+            "best_score": vr["best_score"],
+        })
+
+    return answers
