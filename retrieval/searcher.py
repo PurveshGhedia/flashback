@@ -458,27 +458,37 @@ if __name__ == "__main__":
 # ------------------------------------------------------------------
 # Cross-video search — searches ALL indexed videos
 # ------------------------------------------------------------------
+# Minimum score for a video to be considered relevant in cross-video search.
+# Below this threshold the video is silently skipped — no LLM call made.
+# Tune this based on your embedding space; 0.15 is a conservative starting point.
+CROSS_VIDEO_RELEVANCE_THRESHOLD = 0.30
+
+
 def search_all_videos(
     query: str,
     top_n: int = 3,
+    relevance_threshold: float = CROSS_VIDEO_RELEVANCE_THRESHOLD,
     **kwargs,
 ) -> list[dict]:
     """
-    Search across ALL indexed videos and return the most relevant
-    results grouped by video.
+    Search across ALL indexed videos and return only videos whose
+    best result exceeds relevance_threshold.
 
     Parameters
     ----------
-    query  : natural language query string
-    top_n  : number of top videos to return results from
+    query               : natural language query string
+    top_n               : max number of videos to return
+    relevance_threshold : minimum best_score for a video to be included.
+                          Videos below this are silently skipped — no LLM
+                          call is made for them.
 
     Returns
     -------
     List of dicts sorted by best score, each containing:
       {
         "video_hash"  : str,
-        "video_info"  : dict,        — registry entry
-        "best_score"  : float,       — highest scoring result
+        "video_info"  : dict,
+        "best_score"  : float,
         "results"     : list[SearchResult],
       }
 
@@ -496,7 +506,8 @@ def search_all_videos(
         return []
 
     logger.info(
-        "Cross-video search: '%s' across %d videos", query, len(videos)
+        "Cross-video search: '%s' across %d videos (threshold=%.2f)",
+        query, len(videos), relevance_threshold
     )
 
     video_results = []
@@ -505,33 +516,49 @@ def search_all_videos(
         hash_ = video["video_hash"]
         try:
             response = search(query, hash_, **kwargs)
-            if response.results:
-                best_score = max(r.score for r in response.results)
-                video_results.append({
-                    "video_hash": hash_,
-                    "video_info": video,
-                    "best_score": best_score,
-                    "results": response.results,
-                })
+            if not response.results:
                 logger.info(
-                    "  %s: best_score=%.4f (%d results)",
+                    "  %s: no results — skipping",
+                    video.get("video_name", hash_)
+                )
+                continue
+
+            best_score = max(r.score for r in response.results)
+
+            # Hard threshold — skip video entirely if not relevant enough
+            if best_score < relevance_threshold:
+                logger.info(
+                    "  %s: best_score=%.4f below threshold=%.2f — skipping",
                     video.get("video_name", hash_),
                     best_score,
-                    len(response.results),
+                    relevance_threshold,
                 )
+                continue
+
+            video_results.append({
+                "video_hash": hash_,
+                "video_info": video,
+                "best_score": best_score,
+                "results": response.results,
+            })
+            logger.info(
+                "  %s: best_score=%.4f (%d results) — INCLUDED",
+                video.get("video_name", hash_),
+                best_score,
+                len(response.results),
+            )
+
         except Exception as e:
             logger.warning("Search failed for video %s: %s", hash_, e)
             continue
 
-    # Sort by best score descending
+    # Sort by best score descending and cap at top_n
     video_results.sort(key=lambda x: x["best_score"], reverse=True)
-
-    # Return top_n most relevant videos
     top = video_results[:top_n]
 
     logger.info(
-        "Cross-video search complete — %d/%d videos had results",
-        len(video_results), len(videos)
+        "Cross-video search complete — %d/%d videos passed threshold",
+        len(top), len(videos)
     )
 
     return top

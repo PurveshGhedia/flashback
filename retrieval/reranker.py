@@ -33,6 +33,8 @@ Cost control:
   generation step.
 """
 
+from retrieval.searcher import SearchResult
+from config import GEMINI_MODEL_NAME
 import sys
 import json
 import logging
@@ -40,30 +42,28 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from config import GEMINI_MODEL_NAME
-from retrieval.searcher import SearchResult
 
 logger = logging.getLogger(__name__)
 
 
 # ------------------------------------------------------------------
-# Gemini client loader (cached)
+# Gemini client loader (cached — uses new google-genai SDK)
 # ------------------------------------------------------------------
-_gemini_model = None
+_gemini_client = None
 
 
 def load_gemini_model():
-    """Load and cache the Gemini model."""
-    global _gemini_model
+    """Load and cache the Gemini client (google-genai SDK)."""
+    global _gemini_client
 
-    if _gemini_model is not None:
-        return _gemini_model
+    if _gemini_client is not None:
+        return _gemini_client
 
     try:
-        import google.generativeai as genai
+        import google.genai as genai
     except ImportError:
         raise ImportError(
-            "google-generativeai is required: pip install google-generativeai"
+            "google-genai is required: pip install google-genai"
         )
 
     import os
@@ -77,19 +77,17 @@ def load_gemini_model():
             "  GEMINI_API_KEY=your_key_here"
         )
 
-    genai.configure(api_key=api_key)
-    _gemini_model = genai.GenerativeModel(GEMINI_MODEL_NAME)
-
-    logger.info("Gemini model '%s' loaded.", GEMINI_MODEL_NAME)
-    return _gemini_model
+    _gemini_client = genai.Client(api_key=api_key)
+    logger.info("Gemini client initialised (model: %s).", GEMINI_MODEL_NAME)
+    return _gemini_client
 
 
 # ------------------------------------------------------------------
 # Re-ranking prompt builder
 # ------------------------------------------------------------------
 def _build_rerank_prompt(
-    query   : str,
-    results : list[SearchResult],
+    query: str,
+    results: list[SearchResult],
 ) -> str:
     """
     Build a structured re-ranking prompt for Gemini.
@@ -187,8 +185,8 @@ def _parse_rerank_response(response_text: str, num_candidates: int) -> list[int]
 # Main re-ranking function
 # ------------------------------------------------------------------
 def rerank(
-    query   : str,
-    results : list[SearchResult],
+    query: str,
+    results: list[SearchResult],
     max_reranked: int = 5,
 ) -> list[SearchResult]:
     """
@@ -226,10 +224,13 @@ def rerank(
     )
 
     try:
-        model  = load_gemini_model()
+        client = load_gemini_model()
         prompt = _build_rerank_prompt(query, results)
 
-        response      = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL_NAME,
+            contents=prompt,
+        )
         response_text = response.text
 
         selected_indices = _parse_rerank_response(response_text, len(results))
@@ -276,38 +277,39 @@ def _format_timestamp(seconds: float) -> str:
 # (run: python retrieval/reranker.py)
 # ------------------------------------------------------------------
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    logging.basicConfig(level=logging.INFO,
+                        format="%(levelname)s: %(message)s")
 
     # Mock results for testing without a real indexed video
     mock_results = [
         SearchResult(
-            result_id  = "test_chunk_0",
-            timestamp  = 120.0,
-            score      = 0.42,
-            source     = "transcript",
-            text       = "So backpropagation is the algorithm we use to compute "
-                         "gradients in a neural network. The key idea is the chain rule.",
-            frame_path = "",
-            metadata   = {},
+            result_id="test_chunk_0",
+            timestamp=120.0,
+            score=0.42,
+            source="transcript",
+            text="So backpropagation is the algorithm we use to compute "
+            "gradients in a neural network. The key idea is the chain rule.",
+            frame_path="",
+            metadata={},
         ),
         SearchResult(
-            result_id  = "test_chunk_1",
-            timestamp  = 245.0,
-            score      = 0.38,
-            source     = "transcript",
-            text       = "Word2Vec uses a shallow neural network to learn word "
-                         "embeddings from a large corpus of text.",
-            frame_path = "",
-            metadata   = {},
+            result_id="test_chunk_1",
+            timestamp=245.0,
+            score=0.38,
+            source="transcript",
+            text="Word2Vec uses a shallow neural network to learn word "
+            "embeddings from a large corpus of text.",
+            frame_path="",
+            metadata={},
         ),
         SearchResult(
-            result_id  = "test_frame_0",
-            timestamp  = 118.0,
-            score      = 0.35,
-            source     = "frames",
-            text       = "",
-            frame_path = "data/frames/abc123/frame_003540_t118.00.jpg",
-            metadata   = {},
+            result_id="test_frame_0",
+            timestamp=118.0,
+            score=0.35,
+            source="frames",
+            text="",
+            frame_path="data/frames/abc123/frame_003540_t118.00.jpg",
+            metadata={},
         ),
     ]
 

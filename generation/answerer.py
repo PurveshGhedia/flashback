@@ -437,9 +437,15 @@ if __name__ == "__main__":
     print(f"Model used  : {answer.model_used}")
 
 
+# Minimum score of the top re-ranked result to proceed to Gemini.
+# This is the last gate before an API call is made.
+PRE_GEMINI_MIN_SCORE = 0.20
+
 # ------------------------------------------------------------------
 # Cross-video pipeline convenience function
 # ------------------------------------------------------------------
+
+
 def ask_across_videos(query: str) -> list:
     """
     Search ALL indexed videos and return answers from the most
@@ -480,7 +486,24 @@ def ask_across_videos(query: str) -> list:
         # Step 2: Re-rank per video
         reranked = rerank(query, vr["results"])
 
-        # Step 3: Generate answer
+        if not reranked:
+            logger.info("No results after re-ranking for %s — skipping.",
+                        vr["video_hash"])
+            continue
+
+        # Step 3: Pre-Gemini score gate
+        # Check the best score among re-ranked results.
+        # If it's still too weak, skip — no API call made.
+        top_score = max(r.score for r in reranked)
+        if top_score < PRE_GEMINI_MIN_SCORE:
+            logger.info(
+                "Pre-Gemini gate: skipping video %s — "
+                "top re-ranked score %.4f < %.2f threshold.",
+                vr["video_hash"], top_score, PRE_GEMINI_MIN_SCORE
+            )
+            continue
+
+        # Step 4: Generate answer — only called if content is relevant
         answer = generate_answer(query, reranked)
 
         answers.append({
