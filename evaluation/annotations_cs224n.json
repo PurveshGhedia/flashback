@@ -1,0 +1,26 @@
+{
+  "video_hash": "f2563e9b",
+  "video_name": "Stanford_CS224N_NLP_1.mp4",
+  "video_path": "data/videos/Stanford_CS224N_NLP.mp4",
+  "annotated_at": "2026-03-19T15:41:36",
+  "timestamp_tolerance_sec": 30,
+  "total_annotations": 2,
+  "annotations": [
+    {
+      "query": "what is word2vec",
+      "relevant_timestamps": [
+        73.0,
+        2246.0
+      ],
+      "notes": ""
+    },
+    {
+      "query": "what is a word embedding",
+      "relevant_timestamps": [
+        297.0,
+        369.0
+      ],
+      "notes": ""
+    }
+  ]
+}
