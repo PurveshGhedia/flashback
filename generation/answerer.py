@@ -142,15 +142,11 @@ def _build_generation_prompt(
 
     # -- System context --
     system_text = (
-        "You are a helpful lecture assistant. A student is watching a recorded "
-        "lecture and needs help understanding the content. You have been provided "
-        "with relevant keyframes from the video and transcript excerpts.\n\n"
-        "Your role is to:\n"
-        "1. Answer the student's question clearly and accurately\n"
-        "2. Reference specific timestamps when relevant (use MM:SS format)\n"
-        "3. Connect visual content from the frames with spoken explanations "
-        "from the transcript\n"
-        "4. Be concise but complete — this is educational content\n\n"
+        "Your EXCLUSIVE purpose is to answer questions based on the provided lecture transcript and keyframes.\n\n"
+        "CRITICAL RULES:\n"
+        "1. You must ONLY use the information found in the context below.\n"
+        "2. If the user asks you to perform a task (e.g., write code, draft an essay) or asks about a topic not in the lecture, you MUST NOT comply. Instead, reply exactly with: 'I am a lecture assistant. I can only answer questions related to the content of this video.'\n"
+        "3. Do not use outside knowledge. If the answer isn't in the context, say 'This topic is not covered in the current lecture.'\n\n"
     )
     parts.append(system_text)
 
@@ -398,6 +394,22 @@ def ask(query: str, video_hash: str) -> Answer:
 
     # Step 2: Re-rank
     reranked = rerank(query, search_response.results)
+
+    # NEW: Step 2.5: Pre-Gemini score gate
+    if reranked:
+        top_score = max(r.score for r in reranked)
+        if top_score < PRE_GEMINI_MIN_SCORE:
+            logger.info("Query rejected by threshold: %s < %s",
+                        top_score, PRE_GEMINI_MIN_SCORE)
+            return Answer(
+                query=query,
+                response_text="I couldn't find anything related to that in this lecture. Please ask a question focused on the video content.",
+                timestamps=[],
+                keyframe_paths=[],
+                transcript_used=[],
+                sources=[],
+                model_used=GEMINI_MODEL_NAME,
+            )
 
     # Step 3: Generate
     answer = generate_answer(query, reranked)

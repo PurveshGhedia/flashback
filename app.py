@@ -174,6 +174,18 @@ for k, v in defaults.items():
 # ---------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------
+OFF_TOPIC_PATTERNS = [
+    "write a script", "write an essay", "draft an email",
+    "translate this", "summarize everything", "generate an image",
+    "ignore previous instructions", "what is your prompt"
+]
+
+
+def is_off_topic(query: str) -> bool:
+    q = query.lower().strip()
+    return any(p in q for p in OFF_TOPIC_PATTERNS)
+
+
 def fmt_ts(seconds: float) -> str:
     h = int(seconds // 3600)
     mins = int((seconds % 3600) // 60)
@@ -231,20 +243,90 @@ def run_indexing(video_path: str, force: bool = False):
     return index_video(video_path, force_reindex=force)
 
 
+# def render_answer(answer, show_player: bool = False,
+#                   video_path: str = "", start_sec: float = 0):
+#     """Render answer text, timestamps, keyframes, and optional video player."""
+#     st.markdown(
+#         f'<div class="msg-assistant">{answer.response_text}</div>',
+#         unsafe_allow_html=True
+#     )
+#     if answer.timestamps:
+#         ts_html = " ".join(
+#             f'<span class="ts-pill">▶ {fmt_ts(t)}</span>'
+#             for t in answer.timestamps
+#         )
+#         st.markdown(f'<div style="margin:0.5rem 0;">{ts_html}</div>',
+#                     unsafe_allow_html=True)
+
+#     # Keyframes
+#     if answer.keyframe_paths:
+#         valid = [p for p in answer.keyframe_paths if Path(p).exists()]
+#         if valid:
+#             cols = st.columns(min(len(valid), 3))
+#             for i, (col, path) in enumerate(zip(cols, valid[:3])):
+#                 with col:
+#                     try:
+#                         img = Image.open(path)
+#                         ts = answer.timestamps[i] if i < len(
+#                             answer.timestamps) else 0
+#                         st.image(
+#                             img, caption=f"▶ {fmt_ts(ts)}", use_container_width=True)
+#                     except Exception:
+#                         pass
+
+#     # Video player — seeks to first relevant timestamp
+#     if show_player and video_path and answer.timestamps:
+#         seek_to = int(answer.timestamps[0])
+#         static_url = get_static_video_url(video_path)
+
+#         st.markdown(
+#             f'<div class="section-label" style="margin-top:1rem;">'
+#             f'Video at ▶ {fmt_ts(answer.timestamps[0])}</div>',
+#             unsafe_allow_html=True
+#         )
+#         # HTML5 video player with autostart at timestamp
+#         # st.components.v1.html(f"""
+#         # <video
+#         #     controls
+#         #     autoplay
+#         #     style="width:100%; border-radius:6px; background:#000;
+#         #            border:1px solid #1e1e1e; max-height:360px;"
+#         #     src="/{static_url}#t={seek_to}">
+#         #     Your browser does not support HTML5 video.
+#         # </video>
+#         # """, height=380)
+#         # Create a layout to constrain the video width
+#         # This example uses 70% for the video, 30% for empty space
+#         vid_col, empty_col = st.columns([0.7, 0.3])
+
+#         with vid_col:
+#             st.video(video_path, start_time=seek_to, autoplay=True)
+#         # st.video(video_path, start_time=seek_to, autoplay=True)
+
+
 def render_answer(answer, show_player: bool = False,
                   video_path: str = "", start_sec: float = 0):
     """Render answer text, timestamps, keyframes, and optional video player."""
+    import hashlib
+
     st.markdown(
         f'<div class="msg-assistant">{answer.response_text}</div>',
         unsafe_allow_html=True
     )
+
+    # Generate a unique ID for this specific chat message to prevent widget ID conflicts
+    msg_id = hashlib.md5(answer.response_text.encode()).hexdigest()[:8]
+
+    # Render interactive timestamp buttons instead of raw HTML
     if answer.timestamps:
-        ts_html = " ".join(
-            f'<span class="ts-pill">▶ {fmt_ts(t)}</span>'
-            for t in answer.timestamps
-        )
-        st.markdown(f'<div style="margin:0.5rem 0;">{ts_html}</div>',
-                    unsafe_allow_html=True)
+        # Create enough columns to pack the buttons neatly to the left
+        cols = st.columns(len(answer.timestamps) + 6)
+
+        for i, t in enumerate(answer.timestamps):
+            with cols[i]:
+                # If a button is clicked, save its specific timestamp to session state
+                if st.button(f"▶ {fmt_ts(t)}", key=f"btn_{msg_id}_{i}"):
+                    st.session_state[f"seek_{msg_id}"] = int(t)
 
     # Keyframes
     if answer.keyframe_paths:
@@ -262,27 +344,24 @@ def render_answer(answer, show_player: bool = False,
                     except Exception:
                         pass
 
-    # Video player — seeks to first relevant timestamp
+    # Video player — seeks to the clicked timestamp or defaults to the first one
     if show_player and video_path and answer.timestamps:
-        seek_to = int(answer.timestamps[0])
-        static_url = get_static_video_url(video_path)
+
+        # Pull the clicked timestamp from state, defaulting to the first one
+        seek_to = st.session_state.get(
+            f"seek_{msg_id}", int(answer.timestamps[0]))
 
         st.markdown(
             f'<div class="section-label" style="margin-top:1rem;">'
-            f'Video at ▶ {fmt_ts(answer.timestamps[0])}</div>',
+            f'Video at ▶ {fmt_ts(seek_to)}</div>',
             unsafe_allow_html=True
         )
-        # HTML5 video player with autostart at timestamp
-        st.components.v1.html(f"""
-        <video
-            controls
-            autoplay
-            style="width:100%; border-radius:6px; background:#000;
-                   border:1px solid #1e1e1e; max-height:360px;"
-            src="/{static_url}#t={seek_to}">
-            Your browser does not support HTML5 video.
-        </video>
-        """, height=380)
+
+        # Create a layout to constrain the video width (70% video, 30% empty space)
+        vid_col, empty_col = st.columns([0.7, 0.3])
+
+        with vid_col:
+            st.video(video_path, start_time=seek_to, autoplay=True)
 
 
 # ---------------------------------------------------------------
@@ -594,11 +673,16 @@ elif st.session_state.page == "chat":
 
     st.markdown('<hr class="subtle-divider">', unsafe_allow_html=True)
 
-    # -- Chat history --
+# -- Chat history --
     video_path = info.get("video_path", "")
 
     if st.session_state.chat_history:
-        for entry in st.session_state.chat_history:
+        # Use enumerate to track the index of the message
+        for i, entry in enumerate(st.session_state.chat_history):
+
+            # Check if this is the very last (newest) message in the list
+            is_newest_message = (i == len(st.session_state.chat_history) - 1)
+
             st.markdown(
                 f'<div class="msg-user">{entry["query"]}</div>',
                 unsafe_allow_html=True
@@ -606,13 +690,41 @@ elif st.session_state.page == "chat":
             if entry.get("answer"):
                 render_answer(
                     entry["answer"],
-                    show_player=True,
+                    # ONLY show the video player if it's the newest message!
+                    show_player=is_newest_message,
                     video_path=video_path,
                     start_sec=entry["answer"].timestamps[0]
                     if entry["answer"].timestamps else 0,
                 )
         st.markdown('<hr class="subtle-divider">', unsafe_allow_html=True)
+    # -- Query input --
+    # st.markdown('<div class="section-label">Ask about this lecture</div>',
+    #             unsafe_allow_html=True)
 
+    # input_col, btn_col = st.columns([5, 1], gap="small")
+    # with input_col:
+    #     query = st.text_input(
+    #         label="Query",
+    #         placeholder="e.g. explain attention mechanism, what is word2vec...",
+    #         label_visibility="collapsed",
+    #         key=f"q_{len(st.session_state.chat_history)}",
+    #     )
+    # with btn_col:
+    #     ask_btn = st.button("Ask →", use_container_width=True)
+
+    # if ask_btn and query.strip():
+    #     with st.spinner("Searching..."):
+    #         try:
+    #             from generation.answerer import ask as pipeline_ask
+    #             answer = pipeline_ask(query=query.strip(), video_hash=hash_)
+    #             st.session_state.chat_history.append({
+    #                 "query": query.strip(),
+    #                 "answer": answer,
+    #             })
+    #             st.rerun()
+    #         except Exception as e:
+    #             st.error(f"Query failed: {e}")
+    #             logger.exception("Query error")
     # -- Query input --
     st.markdown('<div class="section-label">Ask about this lecture</div>',
                 unsafe_allow_html=True)
@@ -628,19 +740,26 @@ elif st.session_state.page == "chat":
     with btn_col:
         ask_btn = st.button("Ask →", use_container_width=True)
 
+    # REPLACED BUTTON LOGIC HERE
     if ask_btn and query.strip():
-        with st.spinner("Searching..."):
-            try:
-                from generation.answerer import ask as pipeline_ask
-                answer = pipeline_ask(query=query.strip(), video_hash=hash_)
-                st.session_state.chat_history.append({
-                    "query": query.strip(),
-                    "answer": answer,
-                })
-                st.rerun()
-            except Exception as e:
-                st.error(f"Query failed: {e}")
-                logger.exception("Query error")
+        if is_off_topic(query):
+            # Block it immediately at the UI level
+            st.warning(
+                "Please ask a question about the lecture content — e.g. 'explain backpropagation' or 'what is word2vec'")
+        else:
+            with st.spinner("Searching..."):
+                try:
+                    from generation.answerer import ask as pipeline_ask
+                    answer = pipeline_ask(
+                        query=query.strip(), video_hash=hash_)
+                    st.session_state.chat_history.append({
+                        "query": query.strip(),
+                        "answer": answer,
+                    })
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Query failed: {e}")
+                    logger.exception("Query error")
 
     if not st.session_state.chat_history:
         st.markdown("""
